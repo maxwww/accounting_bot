@@ -5,10 +5,12 @@ import (
 	"crypto/sha1"
 	"encoding/xml"
 	"fmt"
+	"github.com/maxwww/accounting_bot/types"
 	"io"
 	"io/ioutil"
 	"net/http"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -48,7 +50,8 @@ const xmlTemplate = `<?xml version="1.0" encoding="UTF-8"?>
     <data>%s</data>
 </request>`
 
-func GetBalance(password string, card string, merchant string, balanceUrl string) (float64, error) {
+func GetBalance(password string, card string, merchant string, balanceUrl string, ch chan *types.Balance, wg *sync.WaitGroup) {
+	defer wg.Done()
 	data := fmt.Sprintf(dataTemplate, time.Now().Second(), card)
 	md5H := md5.New()
 	sha1H := sha1.New()
@@ -58,19 +61,22 @@ func GetBalance(password string, card string, merchant string, balanceUrl string
 	xmlBody := fmt.Sprintf(xmlTemplate, merchant, signature, data)
 	resp, err := http.Post(balanceUrl, "application/xml", strings.NewReader(xmlBody))
 	if err != nil {
-		return 0, err
+		ch <- &types.Balance{Error: err}
+		return
 	}
 	defer resp.Body.Close()
 
 	bodyBytes, err := ioutil.ReadAll(resp.Body)
 	if err != nil {
-		return 0, err
+		ch <- &types.Balance{Error: err}
+		return
 	}
 	result := Result{}
 	err = xml.Unmarshal(bodyBytes, &result)
 	if err != nil {
-		return 0, err
+		ch <- &types.Balance{Error: err}
+		return
 	}
 
-	return result.ResultData.Info.Cardbalance.Balance, nil
+	ch <- &types.Balance{Balance: result.ResultData.Info.Cardbalance.Balance, Type: "privat"}
 }
