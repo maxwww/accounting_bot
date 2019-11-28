@@ -81,7 +81,8 @@ func main() {
 
 	c := cron.New(
 		cron.WithLocation(time.UTC))
-	c.AddFunc("0 * * * *", sendBalance)
+	c.AddFunc("0 9 * * *", makeSendBalance([]int{idH, idW}))
+	c.AddFunc("0 * * * *", makeSendBalance([]int{idH}))
 	c.Start()
 
 	u := tgbotapi.NewUpdate(0)
@@ -180,56 +181,60 @@ func handleUpdate(update tgbotapi.Update) {
 }
 
 // TODO: use one function
-func sendBalance() {
-	var wg sync.WaitGroup
-	balanceChan := make(chan *types.Balance)
+func makeSendBalance(ids []int) func() {
+	return func() {
+		var wg sync.WaitGroup
+		balanceChan := make(chan *types.Balance)
 
-	go func() {
-		wg.Wait()
-		close(balanceChan)
-	}()
+		go func() {
+			wg.Wait()
+			close(balanceChan)
+		}()
 
-	wg.Add(4)
-	go privat.GetBalance(passwordH, privatCardH, merchantH, privatBalanceEndpoint, balanceChan, &wg, "privat_h")
-	go privat.GetBalance(passwordW, privatCardW, merchantW, privatBalanceEndpoint, balanceChan, &wg, "privat_w")
-	go mono.GetBalance(monoTokenH, monoInfoEndpoint, balanceChan, &wg, "mono_h")
-	go mono.GetBalance(monoTokenW, monoInfoEndpoint, balanceChan, &wg, "mono_w")
+		wg.Add(4)
+		go privat.GetBalance(passwordH, privatCardH, merchantH, privatBalanceEndpoint, balanceChan, &wg, "privat_h")
+		go privat.GetBalance(passwordW, privatCardW, merchantW, privatBalanceEndpoint, balanceChan, &wg, "privat_w")
+		go mono.GetBalance(monoTokenH, monoInfoEndpoint, balanceChan, &wg, "mono_h")
+		go mono.GetBalance(monoTokenW, monoInfoEndpoint, balanceChan, &wg, "mono_w")
 
-	responseMessage := ""
-	balances := map[string]float64{
-		"privat_h": 0,
-		"mono_h":   0,
-		"privat_w": 0,
-		"mono_w":   0,
-	}
-
-	for balance := range balanceChan {
-		if balance.Error != nil {
-			responseMessage = "failed to handle request"
-			continue
+		responseMessage := ""
+		balances := map[string]float64{
+			"privat_h": 0,
+			"mono_h":   0,
+			"privat_w": 0,
+			"mono_w":   0,
 		}
-		balances[balance.Type] = balance.Balance
-	}
-	if responseMessage == "" {
-		responseMessage = fmt.Sprintf(`Загальний баланс: _%.2f_
+
+		for balance := range balanceChan {
+			if balance.Error != nil {
+				responseMessage = "failed to handle request"
+				continue
+			}
+			balances[balance.Type] = balance.Balance
+		}
+		if responseMessage == "" {
+			responseMessage = fmt.Sprintf(`Загальний баланс: _%.2f_
 Максим Приват: _%.2f_
 Максим Моно: _%.2f_
 Оксана Приват: _%.2f_
 Оксана Моно: _%.2f_
 `,
-			balances["privat_h"]+balances["mono_h"]+balances["privat_w"]+balances["mono_w"],
-			balances["privat_h"],
-			balances["mono_h"],
-			balances["privat_w"],
-			balances["mono_w"])
-	}
+				balances["privat_h"]+balances["mono_h"]+balances["privat_w"]+balances["mono_w"],
+				balances["privat_h"],
+				balances["mono_h"],
+				balances["privat_w"],
+				balances["mono_w"])
+		}
 
-	msg := tgbotapi.NewMessage(int64(idH), responseMessage)
-	msg.ParseMode = "markdown"
-	msg.DisableWebPagePreview = true
-	msg.ReplyMarkup = keyboard
-	_, err := bot.Send(msg)
-	if err != nil {
-		log.Print(err)
+		for _, id := range ids {
+			msg := tgbotapi.NewMessage(int64(id), responseMessage)
+			msg.ParseMode = "markdown"
+			msg.DisableWebPagePreview = true
+			msg.ReplyMarkup = keyboard
+			_, err := bot.Send(msg)
+			if err != nil {
+				log.Print(err)
+			}
+		}
 	}
 }

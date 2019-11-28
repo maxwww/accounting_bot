@@ -77,6 +77,6 @@ func GetBalance(password string, card string, merchant string, balanceUrl string
 		ch <- &types.Balance{Error: err}
 		return
 	}
-	fmt.Println(string(bodyBytes))
+
 	ch <- &types.Balance{Balance: result.ResultData.Info.Cardbalance.Balance, Type: key}
 }
