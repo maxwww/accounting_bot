@@ -23,12 +23,16 @@ var (
 	token                 string
 	bot                   *tgbotapi.BotAPI
 	keyboard              *tgbotapi.ReplyKeyboardMarkup
-	merchant              string
-	privatBalanceEndpoint string
+	merchantH             string
+	merchantW             string
 	passwordH             string
-	privatCard            string
+	passwordW             string
+	privatBalanceEndpoint string
+	privatCardH           string
+	privatCardW           string
 	monoInfoEndpoint      string
 	monoTokenH            string
+	monoTokenW            string
 	idH                   int
 	idW                   int
 )
@@ -39,12 +43,16 @@ func init() {
 		log.Fatal("Error loading .env file")
 	}
 	token = os.Getenv("TOKEN")
-	merchant = os.Getenv("MERCHANT")
+	merchantH = os.Getenv("MERCHANT_H")
+	merchantW = os.Getenv("MERCHANT_W")
 	privatBalanceEndpoint = os.Getenv("PRIVAT_BALANCE_ENDPOINT")
 	passwordH = os.Getenv("PASSWORD_H")
-	privatCard = os.Getenv("PRIVAT_CARD")
+	passwordW = os.Getenv("PASSWORD_W")
+	privatCardH = os.Getenv("PRIVAT_CARD_H")
+	privatCardW = os.Getenv("PRIVAT_CARD_W")
 	monoInfoEndpoint = os.Getenv("MONO_API_ENDPOINT")
 	monoTokenH = os.Getenv("MONO_H")
+	monoTokenW = os.Getenv("MONO_W")
 	idH, err = strconv.Atoi(os.Getenv("ID_H"))
 	if err != nil {
 		log.Fatal("Id is not specified")
@@ -53,9 +61,7 @@ func init() {
 	if err != nil {
 		log.Fatal("Id is not specified")
 	}
-	if err != nil {
-		log.Fatal("Id is not specified")
-	}
+
 	dbConnection = db.NewConnection()
 
 	bot, err = tgbotapi.NewBotAPI(token)
@@ -119,19 +125,24 @@ func handleUpdate(update tgbotapi.Update) {
 			close(balanceChan)
 		}()
 
-		wg.Add(2)
-		go privat.GetBalance(passwordH, privatCard, merchant, privatBalanceEndpoint, balanceChan, &wg)
-		go mono.GetBalance(monoTokenH, monoInfoEndpoint, balanceChan, &wg)
+		wg.Add(4)
+		go privat.GetBalance(passwordH, privatCardH, merchantH, privatBalanceEndpoint, balanceChan, &wg, "privat_h")
+		go privat.GetBalance(passwordW, privatCardW, merchantW, privatBalanceEndpoint, balanceChan, &wg, "privat_w")
+		go mono.GetBalance(monoTokenH, monoInfoEndpoint, balanceChan, &wg, "mono_h")
+		go mono.GetBalance(monoTokenW, monoInfoEndpoint, balanceChan, &wg, "mono_w")
 
 		responseMessage := ""
 		balances := map[string]float64{
-			"privat": 0,
-			"mono":   0,
+			"privat_h": 0,
+			"mono_h":   0,
+			"privat_w": 0,
+			"mono_w":   0,
 		}
 
 		for balance := range balanceChan {
 			if balance.Error != nil {
 				responseMessage = "failed to handle request"
+				fmt.Println(balance.Error)
 				continue
 			}
 			balances[balance.Type] = balance.Balance
@@ -140,7 +151,14 @@ func handleUpdate(update tgbotapi.Update) {
 			responseMessage = fmt.Sprintf(`Загальний баланс: _%.2f_
 Максим Приват: _%.2f_
 Максим Моно: _%.2f_
-`, balances["privat"]+balances["mono"], balances["privat"], balances["mono"])
+Оксана Приват: _%.2f_
+Оксана Моно: _%.2f_
+`,
+				balances["privat_h"]+balances["mono_h"]+balances["privat_w"]+balances["mono_w"],
+				balances["privat_h"],
+				balances["mono_h"],
+				balances["privat_w"],
+				balances["mono_w"])
 		}
 
 		msg := tgbotapi.NewMessage(update.Message.Chat.ID, responseMessage)
@@ -171,14 +189,18 @@ func sendBalance() {
 		close(balanceChan)
 	}()
 
-	wg.Add(2)
-	go privat.GetBalance(passwordH, privatCard, merchant, privatBalanceEndpoint, balanceChan, &wg)
-	go mono.GetBalance(monoTokenH, monoInfoEndpoint, balanceChan, &wg)
+	wg.Add(4)
+	go privat.GetBalance(passwordH, privatCardH, merchantH, privatBalanceEndpoint, balanceChan, &wg, "privat_h")
+	go privat.GetBalance(passwordW, privatCardW, merchantW, privatBalanceEndpoint, balanceChan, &wg, "privat_w")
+	go mono.GetBalance(monoTokenH, monoInfoEndpoint, balanceChan, &wg, "mono_h")
+	go mono.GetBalance(monoTokenW, monoInfoEndpoint, balanceChan, &wg, "mono_w")
 
 	responseMessage := ""
 	balances := map[string]float64{
-		"privat": 0,
-		"mono":   0,
+		"privat_h": 0,
+		"mono_h":   0,
+		"privat_w": 0,
+		"mono_w":   0,
 	}
 
 	for balance := range balanceChan {
@@ -192,7 +214,14 @@ func sendBalance() {
 		responseMessage = fmt.Sprintf(`Загальний баланс: _%.2f_
 Максим Приват: _%.2f_
 Максим Моно: _%.2f_
-`, balances["privat"]+balances["mono"], balances["privat"], balances["mono"])
+Оксана Приват: _%.2f_
+Оксана Моно: _%.2f_
+`,
+			balances["privat_h"]+balances["mono_h"]+balances["privat_w"]+balances["mono_w"],
+			balances["privat_h"],
+			balances["mono_h"],
+			balances["privat_w"],
+			balances["mono_w"])
 	}
 
 	msg := tgbotapi.NewMessage(int64(idH), responseMessage)

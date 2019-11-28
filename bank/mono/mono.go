@@ -18,7 +18,7 @@ type Account struct {
 	CreditLimit int `json:"creditLimit"`
 }
 
-func GetBalance(token string, url string, ch chan *types.Balance, wg *sync.WaitGroup) {
+func GetBalance(token string, url string, ch chan *types.Balance, wg *sync.WaitGroup, key string) {
 	defer wg.Done()
 
 	client := &http.Client{}
@@ -57,5 +57,5 @@ func GetBalance(token string, url string, ch chan *types.Balance, wg *sync.WaitG
 
 	result := (balance - creditLimit) / 100
 
-	ch <- &types.Balance{Balance: result, Type: "mono"}
+	ch <- &types.Balance{Balance: result, Type: key}
 }

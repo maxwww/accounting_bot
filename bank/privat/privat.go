@@ -50,7 +50,7 @@ const xmlTemplate = `<?xml version="1.0" encoding="UTF-8"?>
     <data>%s</data>
 </request>`
 
-func GetBalance(password string, card string, merchant string, balanceUrl string, ch chan *types.Balance, wg *sync.WaitGroup) {
+func GetBalance(password string, card string, merchant string, balanceUrl string, ch chan *types.Balance, wg *sync.WaitGroup, key string) {
 	defer wg.Done()
 	data := fmt.Sprintf(dataTemplate, time.Now().Second(), card)
 	md5H := md5.New()
@@ -77,6 +77,6 @@ func GetBalance(password string, card string, merchant string, balanceUrl string
 		ch <- &types.Balance{Error: err}
 		return
 	}
-
-	ch <- &types.Balance{Balance: result.ResultData.Info.Cardbalance.Balance, Type: "privat"}
+	fmt.Println(string(bodyBytes))
+	ch <- &types.Balance{Balance: result.ResultData.Info.Cardbalance.Balance, Type: key}
 }
