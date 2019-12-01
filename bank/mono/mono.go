@@ -18,7 +18,7 @@ type Account struct {
 	CreditLimit int `json:"creditLimit"`
 }
 
-func GetBalance(token string, url string, ch chan *types.Balance, wg *sync.WaitGroup, key string) {
+func GetBalance(token string, url string, ch chan *types.Balance, wg *sync.WaitGroup, name string, order int) {
 	defer wg.Done()
 
 	client := &http.Client{}
@@ -57,5 +57,31 @@ func GetBalance(token string, url string, ch chan *types.Balance, wg *sync.WaitG
 
 	result := (balance - creditLimit) / 100
 
-	ch <- &types.Balance{Balance: result, Type: key}
+	ch <- &types.Balance{Balance: result, Name: name, Order: order}
+}
+
+func GetRates(monoCurrencyEndpoint string, wg *sync.WaitGroup, ch chan *types.Rates) {
+	defer wg.Done()
+
+	res, err := http.Get(monoCurrencyEndpoint)
+	if err != nil {
+		ch <- &types.Rates{Error: err}
+		return
+	}
+
+	response, err := ioutil.ReadAll(res.Body)
+	res.Body.Close()
+	if err != nil {
+		ch <- &types.Rates{Error: err}
+		return
+	}
+
+	var rates []types.Rate
+	err = json.Unmarshal(response, &rates)
+	if err != nil {
+		ch <- &types.Rates{Error: err}
+		return
+	}
+
+	ch <- &types.Rates{Rates: rates}
 }

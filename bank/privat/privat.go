@@ -50,9 +50,9 @@ const xmlTemplate = `<?xml version="1.0" encoding="UTF-8"?>
     <data>%s</data>
 </request>`
 
-func GetBalance(password string, card string, merchant string, balanceUrl string, ch chan *types.Balance, wg *sync.WaitGroup, key string) {
+func GetBalance(password string, card string, merchant string, balanceUrl string, ch chan *types.Balance, wg *sync.WaitGroup, name string, order int) {
 	defer wg.Done()
-	data := fmt.Sprintf(dataTemplate, time.Now().Second(), card)
+	data := fmt.Sprintf(dataTemplate, time.Now().UnixNano(), card)
 	md5H := md5.New()
 	sha1H := sha1.New()
 	io.WriteString(md5H, fmt.Sprintf("%s%s", data, password))
@@ -78,5 +78,5 @@ func GetBalance(password string, card string, merchant string, balanceUrl string
 		return
 	}
 
-	ch <- &types.Balance{Balance: result.ResultData.Info.Cardbalance.Balance, Type: key}
+	ch <- &types.Balance{Balance: result.ResultData.Info.Cardbalance.Balance, Name: name, Order: order}
 }

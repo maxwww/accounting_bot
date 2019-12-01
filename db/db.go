@@ -34,7 +34,48 @@ func NewConnection() *sql.DB {
 	)
 `)
 	if err != nil {
-		log.Fatal("Error to create table", err)
+		log.Fatal("Error to create table users", err)
 	}
+
+	_, err = db.Exec(`
+create table if not exists accounts
+(
+	id serial not null
+		constraint accounts_pkey
+			primary key,
+	slug varchar(255) not null,
+	name varchar(255) not null,
+	currency smallint not null,
+	balance double precision default 0,
+	priority integer
+);
+
+`)
+	if err != nil {
+		log.Fatal("Error to create table users", err)
+	}
+
+	var countRow int
+	err = db.QueryRow("SELECT COUNT(*) FROM accounts").Scan(&countRow)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	if countRow == 0 {
+		query := `
+INSERT INTO accounts
+(slug, name, currency, balance, priority)
+VALUES
+('ukrbusd', 'Ukrsib B USD', 840, 100, 1),
+('ukrbuah', 'Ukrsib B UAH', 980, 1000, 2),
+('ukrpuah', 'Ukrsib P UAH', 980, 2000, 3),
+('ukravto', 'Автомобіль', 980, -12000, 4)
+;`
+		_, err = db.Exec(query)
+		if err != nil {
+			log.Fatal(err)
+		}
+	}
+
 	return db
 }

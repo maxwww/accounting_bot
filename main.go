@@ -7,13 +7,17 @@ import (
 	"github.com/joho/godotenv"
 	"github.com/maxwww/accounting_bot/bank/mono"
 	"github.com/maxwww/accounting_bot/bank/privat"
+	"github.com/maxwww/accounting_bot/bank/ukrsib"
+	"github.com/maxwww/accounting_bot/constants"
 	"github.com/maxwww/accounting_bot/db"
 	"github.com/maxwww/accounting_bot/settings"
 	"github.com/maxwww/accounting_bot/types"
 	"github.com/robfig/cron/v3"
 	"log"
 	"os"
+	"sort"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 )
@@ -31,10 +35,12 @@ var (
 	privatCardH           string
 	privatCardW           string
 	monoInfoEndpoint      string
+	monoCurrencyEndpoint  string
 	monoTokenH            string
 	monoTokenW            string
 	idH                   int
 	idW                   int
+	response              types.Response
 )
 
 func init() {
@@ -51,6 +57,7 @@ func init() {
 	privatCardH = os.Getenv("PRIVAT_CARD_H")
 	privatCardW = os.Getenv("PRIVAT_CARD_W")
 	monoInfoEndpoint = os.Getenv("MONO_API_ENDPOINT")
+	monoCurrencyEndpoint = os.Getenv("MONO_CURRENCY_ENDPOINT")
 	monoTokenH = os.Getenv("MONO_H")
 	monoTokenW = os.Getenv("MONO_W")
 	idH, err = strconv.Atoi(os.Getenv("ID_H"))
@@ -81,7 +88,7 @@ func main() {
 
 	c := cron.New(
 		cron.WithLocation(time.UTC))
-	c.AddFunc("0 9 * * *", makeSendBalance([]int{idH, idW}))
+	c.AddFunc("0 7 * * *", makeSendBalance([]int{idH, idW}))
 	c.AddFunc("0 * * * *", makeSendBalance([]int{idH}))
 	c.Start()
 
@@ -116,8 +123,21 @@ func handleUpdate(update tgbotapi.Update) {
 		return
 	}
 
-	switch update.Message.Text {
-	case "Баланс":
+	switch {
+	case update.Message.Text == "Баланс":
+		now := int(time.Now().Unix())
+		if response.ResponseMessage != "" && now-response.Time < constants.DELAY {
+			msg := tgbotapi.NewMessage(update.Message.Chat.ID, response.ResponseMessage)
+			msg.ParseMode = "markdown"
+			msg.DisableWebPagePreview = true
+			msg.ReplyMarkup = keyboard
+			_, err := bot.Send(msg)
+			if err != nil {
+				log.Print(err)
+			}
+			break
+		}
+
 		var wg sync.WaitGroup
 		balanceChan := make(chan *types.Balance)
 
@@ -126,40 +146,72 @@ func handleUpdate(update tgbotapi.Update) {
 			close(balanceChan)
 		}()
 
-		wg.Add(4)
-		go privat.GetBalance(passwordH, privatCardH, merchantH, privatBalanceEndpoint, balanceChan, &wg, "privat_h")
-		go privat.GetBalance(passwordW, privatCardW, merchantW, privatBalanceEndpoint, balanceChan, &wg, "privat_w")
-		go mono.GetBalance(monoTokenH, monoInfoEndpoint, balanceChan, &wg, "mono_h")
-		go mono.GetBalance(monoTokenW, monoInfoEndpoint, balanceChan, &wg, "mono_w")
+		wg.Add(5)
+		go ukrsib.GetBalance(dbConnection, monoCurrencyEndpoint, balanceChan, &wg, 1)
+		go privat.GetBalance(passwordH, privatCardH, merchantH, privatBalanceEndpoint, balanceChan, &wg, "Максим Приват", 4)
+		go mono.GetBalance(monoTokenH, monoInfoEndpoint, balanceChan, &wg, "Максим Моно", 5)
+		go privat.GetBalance(passwordW, privatCardW, merchantW, privatBalanceEndpoint, balanceChan, &wg, "Оксана Приват", 6)
+		go mono.GetBalance(monoTokenW, monoInfoEndpoint, balanceChan, &wg, "Оксана Моно", 7)
 
 		responseMessage := ""
-		balances := map[string]float64{
-			"privat_h": 0,
-			"mono_h":   0,
-			"privat_w": 0,
-			"mono_w":   0,
-		}
+		var balances []types.Balance
 
+		totalBalance := .0
 		for balance := range balanceChan {
 			if balance.Error != nil {
-				responseMessage = "failed to handle request"
-				fmt.Println(balance.Error)
-				continue
+				responseMessage = "Failed to get balance"
+
+				totalBalance += balance.Balance
+				balances = append(balances, *balance)
+			} else {
+				totalBalance += balance.Balance
+				balances = append(balances, *balance)
 			}
-			balances[balance.Type] = balance.Balance
 		}
+		sort.Slice(balances, func(i, j int) bool { return balances[i].Order < balances[j].Order })
+
 		if responseMessage == "" {
-			responseMessage = fmt.Sprintf(`Загальний баланс: _%.2f_
-Максим Приват: _%.2f_
-Максим Моно: _%.2f_
-Оксана Приват: _%.2f_
-Оксана Моно: _%.2f_
-`,
-				balances["privat_h"]+balances["mono_h"]+balances["privat_w"]+balances["mono_w"],
-				balances["privat_h"],
-				balances["mono_h"],
-				balances["privat_w"],
-				balances["mono_w"])
+			responseFormat := "Загальний баланс: _%.2f_"
+			responseParams := []interface{}{totalBalance}
+			for _, v := range balances {
+				if v.UsdBalance != 0 {
+					responseFormat += "\n%s: _$%.2f_ (_%.2f_)"
+					responseParams = append(responseParams, v.Name, v.UsdBalance, v.Balance)
+				} else {
+					responseFormat += "\n%s: _%.2f_"
+					responseParams = append(responseParams, v.Name, v.Balance)
+				}
+			}
+
+			responseMessage = fmt.Sprintf(responseFormat, responseParams...)
+		}
+
+		response.ResponseMessage = responseMessage
+		response.Time = now
+
+		msg := tgbotapi.NewMessage(update.Message.Chat.ID, responseMessage)
+		msg.ParseMode = "markdown"
+		msg.DisableWebPagePreview = true
+		msg.ReplyMarkup = keyboard
+		_, err := bot.Send(msg)
+		if err != nil {
+			log.Print(err)
+		}
+	case strings.HasPrefix(update.Message.Text, "ukr"):
+		responseMessage := "OK!"
+		args := strings.Split(update.Message.Text, " ")
+		if len(args) != 2 {
+			responseMessage = "Parse error!"
+		} else {
+			f, err := strconv.ParseFloat(args[1], 64)
+			if err != nil {
+				responseMessage = "Parse error!"
+			} else {
+				err = db.UpdateAccount(dbConnection, args[0], f)
+				if err != nil {
+					responseMessage = "Parse error!"
+				}
+			}
 		}
 
 		msg := tgbotapi.NewMessage(update.Message.Chat.ID, responseMessage)
@@ -183,6 +235,21 @@ func handleUpdate(update tgbotapi.Update) {
 // TODO: use one function
 func makeSendBalance(ids []int) func() {
 	return func() {
+		now := int(time.Now().Unix())
+		if response.ResponseMessage != "" && now-response.Time < constants.DELAY {
+			for _, id := range ids {
+				msg := tgbotapi.NewMessage(int64(id), response.ResponseMessage)
+				msg.ParseMode = "markdown"
+				msg.DisableWebPagePreview = true
+				msg.ReplyMarkup = keyboard
+				_, err := bot.Send(msg)
+				if err != nil {
+					log.Print(err)
+				}
+			}
+			return
+		}
+
 		var wg sync.WaitGroup
 		balanceChan := make(chan *types.Balance)
 
@@ -191,40 +258,48 @@ func makeSendBalance(ids []int) func() {
 			close(balanceChan)
 		}()
 
-		wg.Add(4)
-		go privat.GetBalance(passwordH, privatCardH, merchantH, privatBalanceEndpoint, balanceChan, &wg, "privat_h")
-		go privat.GetBalance(passwordW, privatCardW, merchantW, privatBalanceEndpoint, balanceChan, &wg, "privat_w")
-		go mono.GetBalance(monoTokenH, monoInfoEndpoint, balanceChan, &wg, "mono_h")
-		go mono.GetBalance(monoTokenW, monoInfoEndpoint, balanceChan, &wg, "mono_w")
+		wg.Add(5)
+		go ukrsib.GetBalance(dbConnection, monoCurrencyEndpoint, balanceChan, &wg, 1)
+		go privat.GetBalance(passwordH, privatCardH, merchantH, privatBalanceEndpoint, balanceChan, &wg, "Максим Приват", 4)
+		go mono.GetBalance(monoTokenH, monoInfoEndpoint, balanceChan, &wg, "Максим Моно", 5)
+		go privat.GetBalance(passwordW, privatCardW, merchantW, privatBalanceEndpoint, balanceChan, &wg, "Оксана Приват", 6)
+		go mono.GetBalance(monoTokenW, monoInfoEndpoint, balanceChan, &wg, "Оксана Моно", 7)
 
 		responseMessage := ""
-		balances := map[string]float64{
-			"privat_h": 0,
-			"mono_h":   0,
-			"privat_w": 0,
-			"mono_w":   0,
-		}
+		var balances []types.Balance
 
+		totalBalance := .0
 		for balance := range balanceChan {
 			if balance.Error != nil {
-				responseMessage = "failed to handle request"
-				continue
+				responseMessage = "Failed to get balance"
+
+				totalBalance += balance.Balance
+				balances = append(balances, *balance)
+			} else {
+				totalBalance += balance.Balance
+				balances = append(balances, *balance)
 			}
-			balances[balance.Type] = balance.Balance
 		}
+		sort.Slice(balances, func(i, j int) bool { return balances[i].Order < balances[j].Order })
+
 		if responseMessage == "" {
-			responseMessage = fmt.Sprintf(`Загальний баланс: _%.2f_
-Максим Приват: _%.2f_
-Максим Моно: _%.2f_
-Оксана Приват: _%.2f_
-Оксана Моно: _%.2f_
-`,
-				balances["privat_h"]+balances["mono_h"]+balances["privat_w"]+balances["mono_w"],
-				balances["privat_h"],
-				balances["mono_h"],
-				balances["privat_w"],
-				balances["mono_w"])
+			responseFormat := "Загальний баланс: _%.2f_"
+			responseParams := []interface{}{totalBalance}
+			for _, v := range balances {
+				if v.UsdBalance != 0 {
+					responseFormat += "\n%s: _$%.2f_ (_%.2f_)"
+					responseParams = append(responseParams, v.Name, v.UsdBalance, v.Balance)
+				} else {
+					responseFormat += "\n%s: _%.2f_"
+					responseParams = append(responseParams, v.Name, v.Balance)
+				}
+			}
+
+			responseMessage = fmt.Sprintf(responseFormat, responseParams...)
 		}
+
+		response.ResponseMessage = responseMessage
+		response.Time = now
 
 		for _, id := range ids {
 			msg := tgbotapi.NewMessage(int64(id), responseMessage)
