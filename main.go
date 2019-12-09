@@ -89,7 +89,7 @@ func main() {
 	c := cron.New(
 		cron.WithLocation(time.UTC))
 	c.AddFunc("0 7 * * *", makeSendBalance([]int{idH, idW}))
-	c.AddFunc("0 * * * *", makeSendBalance([]int{idH}))
+	c.AddFunc("1 * * * *", makeSendBalance([]int{idH}))
 	c.Start()
 
 	u := tgbotapi.NewUpdate(0)
