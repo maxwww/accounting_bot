@@ -14,8 +14,9 @@ type Response struct {
 }
 
 type Account struct {
-	Balance     int `json:"balance"`
-	CreditLimit int `json:"creditLimit"`
+	Balance     int    `json:"balance"`
+	CreditLimit int    `json:"creditLimit"`
+	Type        string `json:"type"`
 }
 
 func GetBalance(token string, url string, ch chan *types.Balance, wg *sync.WaitGroup, name string, order int) {
@@ -51,8 +52,10 @@ func GetBalance(token string, url string, ch chan *types.Balance, wg *sync.WaitG
 	var creditLimit float64
 
 	for _, v := range response.Accounts {
-		balance += float64(v.Balance)
-		creditLimit += float64(v.CreditLimit)
+		if v.Type == "black" {
+			balance += float64(v.Balance)
+			creditLimit += float64(v.CreditLimit)
+		}
 	}
 
 	result := (balance - creditLimit) / 100
