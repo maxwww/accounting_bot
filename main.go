@@ -286,11 +286,12 @@ func sendExpense() {
 		balanceDiff = response.PrevTotal - response.Total
 	}
 	now := time.Now().Unix()
-	if balanceDiff > 0 {
+	stringBalance := fmt.Sprintf("%.2f", balanceDiff)
+	if balanceDiff > 0 && stringBalance != "0.00" {
 		sentMessages[now] = [][]int{}
 
 		for _, id := range ids {
-			msg := tgbotapi.NewMessage(int64(id), fmt.Sprintf("Ваш баланс зменшився на _%.2f грн_", balanceDiff))
+			msg := tgbotapi.NewMessage(int64(id), fmt.Sprintf("Ваш баланс зменшився на _%s грн_", stringBalance))
 			msg.ParseMode = "markdown"
 			msg.DisableWebPagePreview = true
 			expenseKeyboard := settings.NewExpenseKeyboard(balanceDiff, now)
