@@ -12,6 +12,7 @@ import (
 	"github.com/maxwww/accounting_bot/db"
 	"github.com/maxwww/accounting_bot/settings"
 	"github.com/maxwww/accounting_bot/types"
+	exp "github.com/maxwww/accounting_bot/types/expense"
 	"github.com/robfig/cron/v3"
 	"log"
 	"os"
@@ -41,6 +42,8 @@ var (
 	idH                   int
 	idW                   int
 	response              types.Response
+	sentMessages          map[int64][][]int
+	queueChanel           chan struct{}
 )
 
 func init() {
@@ -76,6 +79,9 @@ func init() {
 		log.Fatal(err)
 	}
 	keyboard = settings.NewKeyboard()
+
+	sentMessages = make(map[int64][][]int)
+	queueChanel = make(chan struct{}, 1)
 }
 
 func main() {
@@ -90,6 +96,7 @@ func main() {
 		cron.WithLocation(time.UTC))
 	c.AddFunc("0 7 * * *", makeSendBalance([]int{idH, idW}))
 	c.AddFunc("1 * * * *", makeSendBalance([]int{idH}))
+	c.AddFunc("@every 90s", getBalances)
 	c.Start()
 
 	u := tgbotapi.NewUpdate(0)
@@ -105,12 +112,66 @@ func main() {
 }
 
 func handleUpdate(update tgbotapi.Update) {
-	if update.Message == nil {
+	if update.Message == nil && update.CallbackQuery == nil {
 		return
 	}
-	log.Printf("[%s] %v - start", update.Message.From.UserName, update.Message.Text)
-	defer log.Printf("[%s] %s - end", update.Message.From.UserName, update.Message.Text)
-	db.LogUser(dbConnection, update.Message.From.ID, update.Message.From.IsBot, update.Message.From.FirstName, update.Message.From.LastName, update.Message.From.UserName, update.Message.From.LanguageCode)
+
+	var user *tgbotapi.User
+	var inputText string
+	if update.Message != nil {
+		user = update.Message.From
+		inputText = update.Message.Text
+	} else if update.CallbackQuery != nil {
+		user = update.CallbackQuery.From
+		inputText = update.CallbackQuery.Data
+	}
+
+	log.Printf("[%s] %v - start", user.UserName, inputText)
+	defer log.Printf("[%s] %s - end", user.UserName, inputText)
+	db.LogUser(dbConnection, user.ID, user.IsBot, user.FirstName, user.LastName, user.UserName, user.LanguageCode)
+
+	if update.CallbackQuery != nil {
+		parts := strings.Split(update.CallbackQuery.Data, "@@")
+		expense, _ := strconv.Atoi(parts[0])
+		stringExpense := exp.ExpenseMap[expense]
+		amount, _ := strconv.ParseFloat(parts[1], 64)
+		timestamp, _ := strconv.Atoi(parts[2])
+		location, _ := time.LoadLocation("Europe/Kiev")
+		tm := time.Unix(int64(timestamp), 0).In(location)
+		added := db.AddExpense(dbConnection, stringExpense, amount, tm, update.CallbackQuery.From.ID)
+
+		if added {
+			if _, ok := sentMessages[int64(timestamp)]; ok {
+				for _, v := range sentMessages[int64(timestamp)] {
+					msg := tgbotapi.NewDeleteMessage(int64(v[0]), v[1])
+					_, err := bot.Send(msg)
+					if err != nil {
+						log.Print(err)
+					}
+
+					msg2 := tgbotapi.NewMessage(int64(v[0]), fmt.Sprintf("_%.2f грн_ було витрачено на _%s_ (%s)", amount, stringExpense, update.CallbackQuery.From.FirstName))
+					msg2.ParseMode = "markdown"
+					msg2.DisableWebPagePreview = true
+					_, err = bot.Send(msg2)
+					if err != nil {
+						log.Print(err)
+					}
+				}
+
+				delete(sentMessages, int64(timestamp))
+			} else {
+				msg := tgbotapi.NewDeleteMessage(update.CallbackQuery.Message.Chat.ID, update.CallbackQuery.Message.MessageID)
+				_, err := bot.Send(msg)
+				if err != nil {
+					log.Print(err)
+				}
+			}
+		} else {
+			delete(sentMessages, int64(timestamp))
+		}
+
+		return
+	}
 
 	if update.Message.From.ID != idH && update.Message.From.ID != idW {
 		msg := tgbotapi.NewMessage(update.Message.Chat.ID, update.Message.Text)
@@ -126,6 +187,7 @@ func handleUpdate(update tgbotapi.Update) {
 	switch {
 	case update.Message.Text == "Баланс":
 		now := int(time.Now().Unix())
+		getBalances()
 		if response.ResponseMessage != "" && now-response.Time < constants.DELAY {
 			msg := tgbotapi.NewMessage(update.Message.Chat.ID, response.ResponseMessage)
 			msg.ParseMode = "markdown"
@@ -136,66 +198,6 @@ func handleUpdate(update tgbotapi.Update) {
 				log.Print(err)
 			}
 			break
-		}
-
-		var wg sync.WaitGroup
-		balanceChan := make(chan *types.Balance)
-
-		go func() {
-			wg.Wait()
-			close(balanceChan)
-		}()
-
-		wg.Add(5)
-		go ukrsib.GetBalance(dbConnection, monoCurrencyEndpoint, balanceChan, &wg, 1)
-		go privat.GetBalance(passwordH, privatCardH, merchantH, privatBalanceEndpoint, balanceChan, &wg, "Максим Приват", 4)
-		go mono.GetBalance(monoTokenH, monoInfoEndpoint, balanceChan, &wg, "Максим Моно", 5)
-		go privat.GetBalance(passwordW, privatCardW, merchantW, privatBalanceEndpoint, balanceChan, &wg, "Оксана Приват", 6)
-		go mono.GetBalance(monoTokenW, monoInfoEndpoint, balanceChan, &wg, "Оксана Моно", 7)
-
-		responseMessage := ""
-		var balances []types.Balance
-
-		totalBalance := .0
-		for balance := range balanceChan {
-			if balance.Error != nil {
-				responseMessage = "Failed to get balance"
-
-				totalBalance += balance.Balance
-				balances = append(balances, *balance)
-			} else {
-				totalBalance += balance.Balance
-				balances = append(balances, *balance)
-			}
-		}
-		sort.Slice(balances, func(i, j int) bool { return balances[i].Order < balances[j].Order })
-
-		if responseMessage == "" {
-			responseFormat := "Загальний баланс: _%.2f_"
-			responseParams := []interface{}{totalBalance}
-			for _, v := range balances {
-				if v.UsdBalance != 0 {
-					responseFormat += "\n%s: _$%.2f_ (_%.2f_)"
-					responseParams = append(responseParams, v.Name, v.UsdBalance, v.Balance)
-				} else {
-					responseFormat += "\n%s: _%.2f_"
-					responseParams = append(responseParams, v.Name, v.Balance)
-				}
-			}
-
-			responseMessage = fmt.Sprintf(responseFormat, responseParams...)
-		}
-
-		response.ResponseMessage = responseMessage
-		response.Time = now
-
-		msg := tgbotapi.NewMessage(update.Message.Chat.ID, responseMessage)
-		msg.ParseMode = "markdown"
-		msg.DisableWebPagePreview = true
-		msg.ReplyMarkup = keyboard
-		_, err := bot.Send(msg)
-		if err != nil {
-			log.Print(err)
 		}
 	case strings.HasPrefix(update.Message.Text, "ukr"):
 		responseMessage := "OK!"
@@ -222,6 +224,50 @@ func handleUpdate(update tgbotapi.Update) {
 		if err != nil {
 			log.Print(err)
 		}
+	case update.Message.Text == "Поточні":
+		expenses, err := db.GetCurrentExpenses(dbConnection)
+		if err != nil {
+			log.Print(err)
+		} else {
+			if len(expenses) == 0 {
+				msg := tgbotapi.NewMessage(update.Message.Chat.ID, "Витрати відсутні")
+				msg.ReplyMarkup = keyboard
+				_, err := bot.Send(msg)
+				if err != nil {
+					log.Print(err)
+				}
+			} else {
+				msg := tgbotapi.NewMessage(update.Message.Chat.ID, buildExpenseMessage(expenses, "Ваші поточні витрати"))
+				msg.ParseMode = "markdown"
+				msg.ReplyMarkup = keyboard
+				_, err := bot.Send(msg)
+				if err != nil {
+					log.Print(err)
+				}
+			}
+		}
+	case update.Message.Text == "Минуломісячні":
+		expenses, err := db.GetLastMonthExpenses(dbConnection)
+		if err != nil {
+			log.Print(err)
+		} else {
+			if len(expenses) == 0 {
+				msg := tgbotapi.NewMessage(update.Message.Chat.ID, "Витрати відсутні")
+				msg.ReplyMarkup = keyboard
+				_, err := bot.Send(msg)
+				if err != nil {
+					log.Print(err)
+				}
+			} else {
+				msg := tgbotapi.NewMessage(update.Message.Chat.ID, buildExpenseMessage(expenses, "Ваші минуломісячні витрати"))
+				msg.ParseMode = "markdown"
+				msg.ReplyMarkup = keyboard
+				_, err := bot.Send(msg)
+				if err != nil {
+					log.Print(err)
+				}
+			}
+		}
 	default:
 		msg := tgbotapi.NewMessage(update.Message.Chat.ID, update.Message.Text)
 		msg.ReplyMarkup = keyboard
@@ -232,10 +278,36 @@ func handleUpdate(update tgbotapi.Update) {
 	}
 }
 
-// TODO: use one function
+func sendExpense() {
+	ids := []int{idH, idW}
+	//ids := []int{idH}
+	balanceDiff := .0
+	if response.PrevTotal != 0 && response.Total != 0 {
+		balanceDiff = response.PrevTotal - response.Total
+	}
+	now := time.Now().Unix()
+	if balanceDiff > 0 {
+		sentMessages[now] = [][]int{}
+
+		for _, id := range ids {
+			msg := tgbotapi.NewMessage(int64(id), fmt.Sprintf("Ваш баланс зменшився на _%.2f грн_", balanceDiff))
+			msg.ParseMode = "markdown"
+			msg.DisableWebPagePreview = true
+			expenseKeyboard := settings.NewExpenseKeyboard(balanceDiff, now)
+			msg.ReplyMarkup = &expenseKeyboard
+			sent, err := bot.Send(msg)
+			if err != nil {
+				log.Print(err)
+			}
+			sentMessages[now] = append(sentMessages[now], []int{int(sent.Chat.ID), sent.MessageID})
+		}
+	}
+}
+
 func makeSendBalance(ids []int) func() {
 	return func() {
 		now := int(time.Now().Unix())
+		getBalances()
 		if response.ResponseMessage != "" && now-response.Time < constants.DELAY {
 			for _, id := range ids {
 				msg := tgbotapi.NewMessage(int64(id), response.ResponseMessage)
@@ -249,16 +321,21 @@ func makeSendBalance(ids []int) func() {
 			}
 			return
 		}
+	}
+}
 
+func getBalances() {
+	queueChanel <- struct{}{}
+	now := int(time.Now().Unix())
+	if response.ResponseMessage == "" || now-response.Time > constants.DELAY {
 		var wg sync.WaitGroup
 		balanceChan := make(chan *types.Balance)
-
+		wg.Add(5)
 		go func() {
 			wg.Wait()
 			close(balanceChan)
 		}()
 
-		wg.Add(5)
 		go ukrsib.GetBalance(dbConnection, monoCurrencyEndpoint, balanceChan, &wg, 1)
 		go privat.GetBalance(passwordH, privatCardH, merchantH, privatBalanceEndpoint, balanceChan, &wg, "Максим Приват", 4)
 		go mono.GetBalance(monoTokenH, monoInfoEndpoint, balanceChan, &wg, "Максим Моно", 5)
@@ -269,15 +346,16 @@ func makeSendBalance(ids []int) func() {
 		var balances []types.Balance
 
 		totalBalance := .0
+		totalExpenseBalance := .0
 		for balance := range balanceChan {
 			if balance.Error != nil {
+				fmt.Println(balance.Error)
 				responseMessage = "Failed to get balance"
-
-				totalBalance += balance.Balance
-				balances = append(balances, *balance)
-			} else {
-				totalBalance += balance.Balance
-				balances = append(balances, *balance)
+			}
+			totalBalance += balance.Balance
+			balances = append(balances, *balance)
+			if balance.CheckExpense {
+				totalExpenseBalance += balance.Balance
 			}
 		}
 		sort.Slice(balances, func(i, j int) bool { return balances[i].Order < balances[j].Order })
@@ -300,16 +378,20 @@ func makeSendBalance(ids []int) func() {
 
 		response.ResponseMessage = responseMessage
 		response.Time = now
+		response.PrevTotal = response.Total
+		response.Total = totalExpenseBalance
 
-		for _, id := range ids {
-			msg := tgbotapi.NewMessage(int64(id), responseMessage)
-			msg.ParseMode = "markdown"
-			msg.DisableWebPagePreview = true
-			msg.ReplyMarkup = keyboard
-			_, err := bot.Send(msg)
-			if err != nil {
-				log.Print(err)
-			}
+		if response.PrevTotal != 0 && response.Total != 0 && response.PrevTotal != response.Total {
+			sendExpense()
 		}
 	}
+	<-queueChanel
+}
+
+func buildExpenseMessage(expenses []types.Expense, startMessage string) string {
+	message := startMessage + ":\n"
+	for _, v := range expenses {
+		message += fmt.Sprintf("\n*%s* - _%.2f грн_", v.Expense, v.Amount)
+	}
+	return message
 }

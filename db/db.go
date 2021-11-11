@@ -15,7 +15,7 @@ func NewConnection() *sql.DB {
 	pgPassword := os.Getenv("PG_PASSWORD")
 	pgHost := os.Getenv("PG_HOST")
 
-	connStr := fmt.Sprintf("host=%s dbname=%s user=%s password=%s sslmode=disable", pgHost, pgBasename, pgUser, pgPassword)
+	connStr := fmt.Sprintf("host=%s dbname=%s user=%s password=%s sslmode=disable TimeZone=Europe/Kiev", pgHost, pgBasename, pgUser, pgPassword)
 	db, err := sql.Open("postgres", connStr)
 	if err != nil {
 		log.Fatal("Error connect to DB", err)

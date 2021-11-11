@@ -60,7 +60,7 @@ func GetBalance(token string, url string, ch chan *types.Balance, wg *sync.WaitG
 
 	result := (balance - creditLimit) / 100
 
-	ch <- &types.Balance{Balance: result, Name: name, Order: order}
+	ch <- &types.Balance{Balance: result, Name: name, Order: order, CheckExpense: true}
 }
 
 func GetRates(monoCurrencyEndpoint string, wg *sync.WaitGroup, ch chan *types.Rates) {
