@@ -7,6 +7,7 @@ const (
 	CLOTHES
 	CAR
 	HEALTH
+	CANCEL
 )
 
 var ExpenseMap = map[int]string{
@@ -16,4 +17,5 @@ var ExpenseMap = map[int]string{
 	CLOTHES: "Одяг",
 	CAR:     "Авто",
 	HEALTH:  "Здоров'я",
+	CANCEL:  "Відмінити",
 }

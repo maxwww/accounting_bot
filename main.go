@@ -136,6 +136,35 @@ func handleUpdate(update tgbotapi.Update) {
 		stringExpense := exp.ExpenseMap[expense]
 		amount, _ := strconv.ParseFloat(parts[1], 64)
 		timestamp, _ := strconv.Atoi(parts[2])
+
+		if expense == exp.CANCEL {
+			if _, ok := sentMessages[int64(timestamp)]; ok {
+				for _, v := range sentMessages[int64(timestamp)] {
+					msg := tgbotapi.NewDeleteMessage(int64(v[0]), v[1])
+					_, err := bot.Send(msg)
+					if err != nil {
+						log.Print(err)
+					}
+
+					msg2 := tgbotapi.NewMessage(int64(v[0]), "Охрана отмєна")
+					_, err = bot.Send(msg2)
+					if err != nil {
+						log.Print(err)
+					}
+				}
+
+				delete(sentMessages, int64(timestamp))
+			} else {
+				msg := tgbotapi.NewDeleteMessage(update.CallbackQuery.Message.Chat.ID, update.CallbackQuery.Message.MessageID)
+				_, err := bot.Send(msg)
+				if err != nil {
+					log.Print(err)
+				}
+			}
+
+			return
+		}
+
 		location, _ := time.LoadLocation("Europe/Kiev")
 		tm := time.Unix(int64(timestamp), 0).In(location)
 		added := db.AddExpense(dbConnection, stringExpense, amount, tm, update.CallbackQuery.From.ID)
@@ -246,7 +275,7 @@ func handleUpdate(update tgbotapi.Update) {
 				}
 			}
 		}
-	case update.Message.Text == "Минуломісячні":
+	case update.Message.Text == "Минулі":
 		expenses, err := db.GetLastMonthExpenses(dbConnection)
 		if err != nil {
 			log.Print(err)
@@ -348,16 +377,25 @@ func getBalances() {
 
 		totalBalance := .0
 		totalExpenseBalance := .0
+		isError := false
 		for balance := range balanceChan {
 			if balance.Error != nil {
 				fmt.Println(balance.Error)
 				responseMessage = "Failed to get balance"
+				isError = true
+			} else {
+				if balance.CheckExpense {
+					if fmt.Sprintf("%.2f", balance.Balance) == "0.00" {
+						fmt.Println("empty balance")
+						fmt.Println(balance)
+						isError = true
+					} else {
+						totalExpenseBalance += balance.Balance
+					}
+				}
 			}
 			totalBalance += balance.Balance
 			balances = append(balances, *balance)
-			if balance.CheckExpense {
-				totalExpenseBalance += balance.Balance
-			}
 		}
 		sort.Slice(balances, func(i, j int) bool { return balances[i].Order < balances[j].Order })
 
@@ -379,11 +417,14 @@ func getBalances() {
 
 		response.ResponseMessage = responseMessage
 		response.Time = now
-		response.PrevTotal = response.Total
-		response.Total = totalExpenseBalance
 
-		if response.PrevTotal != 0 && response.Total != 0 && response.PrevTotal != response.Total {
-			sendExpense()
+		if !isError {
+			response.PrevTotal = response.Total
+			response.Total = totalExpenseBalance
+
+			if response.PrevTotal != 0 && response.Total != 0 && response.PrevTotal != response.Total {
+				sendExpense()
+			}
 		}
 	}
 	<-queueChanel

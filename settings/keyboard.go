@@ -11,7 +11,7 @@ func NewKeyboard() *tgbotapi.ReplyKeyboardMarkup {
 		tgbotapi.NewKeyboardButtonRow(
 			tgbotapi.NewKeyboardButton("Баланс"),
 			tgbotapi.NewKeyboardButton("Поточні"),
-			tgbotapi.NewKeyboardButton("Минуломісячні"),
+			tgbotapi.NewKeyboardButton("Минулі"),
 		),
 	)
 
@@ -46,6 +46,12 @@ func NewExpenseKeyboard(amount float64, now int64) tgbotapi.InlineKeyboardMarkup
 			tgbotapi.NewInlineKeyboardButtonData(
 				"Інше",
 				fmt.Sprintf("%d@@%.2f@@%d", expense.OTHER, amount, now),
+			),
+		),
+		tgbotapi.NewInlineKeyboardRow(
+			tgbotapi.NewInlineKeyboardButtonData(
+				"❌ Відмінити",
+				fmt.Sprintf("%d@@%.2f@@%d", expense.CANCEL, amount, now),
 			),
 		),
 	)
