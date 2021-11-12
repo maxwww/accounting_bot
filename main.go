@@ -44,6 +44,7 @@ var (
 	response              types.Response
 	sentMessages          map[int64][][]int
 	queueChanel           chan struct{}
+	familyMap             map[int64]int64
 )
 
 func init() {
@@ -82,6 +83,10 @@ func init() {
 
 	sentMessages = make(map[int64][][]int)
 	queueChanel = make(chan struct{}, 1)
+	familyMap = map[int64]int64{
+		int64(idW): int64(idH),
+		int64(idH): int64(idW),
+	}
 }
 
 func main() {
@@ -95,7 +100,7 @@ func main() {
 	c := cron.New(
 		cron.WithLocation(time.UTC))
 	c.AddFunc("0 7 * * *", makeSendBalance([]int{idH, idW}))
-	c.AddFunc("1 * * * *", makeSendBalance([]int{idH}))
+	//c.AddFunc("1 * * * *", makeSendBalance([]int{idH}))
 	c.AddFunc("@every 90s", getBalances)
 	c.Start()
 
@@ -140,14 +145,16 @@ func handleUpdate(update tgbotapi.Update) {
 		if expense == exp.CANCEL {
 			if _, ok := sentMessages[int64(timestamp)]; ok {
 				for _, v := range sentMessages[int64(timestamp)] {
-					msg := tgbotapi.NewDeleteMessage(int64(v[0]), v[1])
-					_, err := bot.Send(msg)
-					if err != nil {
-						log.Print(err)
+					if len(v) == 2 {
+						msg := tgbotapi.NewDeleteMessage(int64(v[0]), v[1])
+						_, err := bot.Send(msg)
+						if err != nil {
+							log.Print(err)
+						}
 					}
 
 					msg2 := tgbotapi.NewMessage(int64(v[0]), "Охрана отмєна")
-					_, err = bot.Send(msg2)
+					_, err := bot.Send(msg2)
 					if err != nil {
 						log.Print(err)
 					}
@@ -172,16 +179,18 @@ func handleUpdate(update tgbotapi.Update) {
 		if added {
 			if _, ok := sentMessages[int64(timestamp)]; ok {
 				for _, v := range sentMessages[int64(timestamp)] {
-					msg := tgbotapi.NewDeleteMessage(int64(v[0]), v[1])
-					_, err := bot.Send(msg)
-					if err != nil {
-						log.Print(err)
+					if len(v) == 2 {
+						msg := tgbotapi.NewDeleteMessage(int64(v[0]), v[1])
+						_, err := bot.Send(msg)
+						if err != nil {
+							log.Print(err)
+						}
 					}
 
 					msg2 := tgbotapi.NewMessage(int64(v[0]), fmt.Sprintf("_%.2f грн_ було витрачено на _%s_ (%s)", amount, stringExpense, update.CallbackQuery.From.FirstName))
 					msg2.ParseMode = "markdown"
 					msg2.DisableWebPagePreview = true
-					_, err = bot.Send(msg2)
+					_, err := bot.Send(msg2)
 					if err != nil {
 						log.Print(err)
 					}
@@ -213,6 +222,8 @@ func handleUpdate(update tgbotapi.Update) {
 		return
 	}
 
+	preparedText := strings.Replace(update.Message.Text, ",", ".", -1)
+	parsedFloat, floatErr := strconv.ParseFloat(preparedText, 64)
 	switch {
 	case update.Message.Text == "Баланс":
 		now := int(time.Now().Unix())
@@ -295,6 +306,24 @@ func handleUpdate(update tgbotapi.Update) {
 				if err != nil {
 					log.Print(err)
 				}
+			}
+		}
+	case floatErr == nil:
+		if parsedFloat > 0 {
+			now := time.Now().Unix()
+			stringBalance := fmt.Sprintf("%.2f", parsedFloat)
+			msg := tgbotapi.NewMessage(update.Message.Chat.ID, fmt.Sprintf("Ваш баланс зменшився на _%s грн_", stringBalance))
+			msg.ParseMode = "markdown"
+			msg.DisableWebPagePreview = true
+			expenseKeyboard := settings.NewExpenseKeyboard(parsedFloat, now)
+			msg.ReplyMarkup = &expenseKeyboard
+			sent, err := bot.Send(msg)
+			if err != nil {
+				log.Print(err)
+			}
+			sentMessages[now] = append(sentMessages[now], []int{int(sent.Chat.ID), sent.MessageID})
+			if partnerId, ok := familyMap[sent.Chat.ID]; ok {
+				sentMessages[now] = append(sentMessages[now], []int{int(partnerId)})
 			}
 		}
 	default:
