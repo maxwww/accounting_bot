@@ -5,6 +5,7 @@ services:
   bot:
     build: .
     container_name: accounting_bot
+    restart: always
     volumes:
       - .env:/root/.env
     depends_on:
