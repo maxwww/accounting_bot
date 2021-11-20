@@ -42,9 +42,10 @@ var (
 	idH                   int
 	idW                   int
 	response              types.Response
-	sentMessages          map[int64][][]int
+	sentMessages          map[string][][]int
 	queueChanel           chan struct{}
 	familyMap             map[int64]int64
+	balancesMap           map[string]types.BalanceTracker
 )
 
 func init() {
@@ -81,12 +82,13 @@ func init() {
 	}
 	keyboard = settings.NewKeyboard()
 
-	sentMessages = make(map[int64][][]int)
+	sentMessages = make(map[string][][]int)
 	queueChanel = make(chan struct{}, 1)
 	familyMap = map[int64]int64{
 		int64(idW): int64(idH),
 		int64(idH): int64(idW),
 	}
+	balancesMap = map[string]types.BalanceTracker{}
 }
 
 func main() {
@@ -140,11 +142,13 @@ func handleUpdate(update tgbotapi.Update) {
 		expense, _ := strconv.Atoi(parts[0])
 		stringExpense := exp.ExpenseMap[expense]
 		amount, _ := strconv.ParseFloat(parts[1], 64)
-		timestamp, _ := strconv.Atoi(parts[2])
+		key := parts[2]
+		keyParts := strings.Split(key, "_")
+		timestamp, _ := strconv.Atoi(keyParts[1])
 
 		if expense == exp.CANCEL {
-			if _, ok := sentMessages[int64(timestamp)]; ok {
-				for _, v := range sentMessages[int64(timestamp)] {
+			if _, ok := sentMessages[key]; ok {
+				for _, v := range sentMessages[key] {
 					if len(v) == 2 {
 						msg := tgbotapi.NewDeleteMessage(int64(v[0]), v[1])
 						_, err := bot.Send(msg)
@@ -160,7 +164,7 @@ func handleUpdate(update tgbotapi.Update) {
 					}
 				}
 
-				delete(sentMessages, int64(timestamp))
+				delete(sentMessages, key)
 			} else {
 				msg := tgbotapi.NewDeleteMessage(update.CallbackQuery.Message.Chat.ID, update.CallbackQuery.Message.MessageID)
 				_, err := bot.Send(msg)
@@ -177,8 +181,8 @@ func handleUpdate(update tgbotapi.Update) {
 		added := db.AddExpense(dbConnection, stringExpense, amount, tm, update.CallbackQuery.From.ID)
 
 		if added {
-			if _, ok := sentMessages[int64(timestamp)]; ok {
-				for _, v := range sentMessages[int64(timestamp)] {
+			if _, ok := sentMessages[key]; ok {
+				for _, v := range sentMessages[key] {
 					if len(v) == 2 {
 						msg := tgbotapi.NewDeleteMessage(int64(v[0]), v[1])
 						_, err := bot.Send(msg)
@@ -196,7 +200,7 @@ func handleUpdate(update tgbotapi.Update) {
 					}
 				}
 
-				delete(sentMessages, int64(timestamp))
+				delete(sentMessages, key)
 			} else {
 				msg := tgbotapi.NewDeleteMessage(update.CallbackQuery.Message.Chat.ID, update.CallbackQuery.Message.MessageID)
 				_, err := bot.Send(msg)
@@ -205,7 +209,7 @@ func handleUpdate(update tgbotapi.Update) {
 				}
 			}
 		} else {
-			delete(sentMessages, int64(timestamp))
+			delete(sentMessages, key)
 		}
 
 		return
@@ -311,54 +315,67 @@ func handleUpdate(update tgbotapi.Update) {
 	case floatErr == nil:
 		if parsedFloat > 0 {
 			now := time.Now().Unix()
+			key := fmt.Sprintf("%d_%d", update.Message.MessageID, now)
 			stringBalance := fmt.Sprintf("%.2f", parsedFloat)
 			msg := tgbotapi.NewMessage(update.Message.Chat.ID, fmt.Sprintf("Ваш баланс зменшився на _%s грн_", stringBalance))
 			msg.ParseMode = "markdown"
 			msg.DisableWebPagePreview = true
-			expenseKeyboard := settings.NewExpenseKeyboard(parsedFloat, now)
+			expenseKeyboard := settings.NewExpenseKeyboard(parsedFloat, key)
 			msg.ReplyMarkup = &expenseKeyboard
 			sent, err := bot.Send(msg)
 			if err != nil {
 				log.Print(err)
 			}
-			sentMessages[now] = append(sentMessages[now], []int{int(sent.Chat.ID), sent.MessageID})
+			sentMessages[key] = append(sentMessages[key], []int{int(sent.Chat.ID), sent.MessageID})
 			if partnerId, ok := familyMap[sent.Chat.ID]; ok {
-				sentMessages[now] = append(sentMessages[now], []int{int(partnerId)})
+				sentMessages[key] = append(sentMessages[key], []int{int(partnerId)})
 			}
 		}
 	default:
-		msg := tgbotapi.NewMessage(update.Message.Chat.ID, update.Message.Text)
-		msg.ReplyMarkup = keyboard
-		_, err := bot.Send(msg)
+		msgD := tgbotapi.NewDeleteMessage(update.Message.Chat.ID, update.Message.MessageID)
+		_, err := bot.Send(msgD)
 		if err != nil {
 			log.Print(err)
+		}
+
+		msg := tgbotapi.NewMessage(update.Message.Chat.ID, update.Message.Text)
+		msg.ReplyMarkup = keyboard
+		_, err = bot.Send(msg)
+		if err != nil {
+			log.Print(err)
+		}
+
+		if partnerId, ok := familyMap[update.Message.Chat.ID]; ok {
+			msg := tgbotapi.NewMessage(partnerId, update.Message.Text+fmt.Sprintf(" (від %s)", update.Message.From.FirstName))
+			msg.ReplyMarkup = keyboard
+			_, err := bot.Send(msg)
+			if err != nil {
+				log.Print(err)
+			}
 		}
 	}
 }
 
-func sendExpense() {
+func sendExpense(balanceDiff float64, prefix string) {
 	ids := []int{idH, idW}
 	//ids := []int{idH}
-	balanceDiff := .0
-	if response.PrevTotal != 0 && response.Total != 0 {
-		balanceDiff = response.PrevTotal - response.Total
-	}
 	now := time.Now().Unix()
+	key := fmt.Sprintf("%s_%d", prefix, now)
 	stringBalance := fmt.Sprintf("%.2f", balanceDiff)
 	if balanceDiff > 0 && stringBalance != "0.00" {
-		sentMessages[now] = [][]int{}
+		sentMessages[key] = [][]int{}
 
 		for _, id := range ids {
 			msg := tgbotapi.NewMessage(int64(id), fmt.Sprintf("Ваш баланс зменшився на _%s грн_", stringBalance))
 			msg.ParseMode = "markdown"
 			msg.DisableWebPagePreview = true
-			expenseKeyboard := settings.NewExpenseKeyboard(balanceDiff, now)
+			expenseKeyboard := settings.NewExpenseKeyboard(balanceDiff, key)
 			msg.ReplyMarkup = &expenseKeyboard
 			sent, err := bot.Send(msg)
 			if err != nil {
 				log.Print(err)
 			}
-			sentMessages[now] = append(sentMessages[now], []int{int(sent.Chat.ID), sent.MessageID})
+			sentMessages[key] = append(sentMessages[key], []int{int(sent.Chat.ID), sent.MessageID})
 		}
 	}
 }
@@ -405,21 +422,31 @@ func getBalances() {
 		var balances []types.Balance
 
 		totalBalance := .0
-		totalExpenseBalance := .0
-		isError := false
 		for balance := range balanceChan {
 			if balance.Error != nil {
 				fmt.Println(balance.Error)
 				responseMessage = "Failed to get balance"
-				isError = true
 			} else {
 				if balance.CheckExpense {
 					if fmt.Sprintf("%.2f", balance.Balance) == "0.00" {
 						fmt.Println("empty balance")
 						fmt.Println(balance)
-						isError = true
 					} else {
-						totalExpenseBalance += balance.Balance
+						if _, ok := balancesMap[balance.Name]; !ok {
+							balancesMap[balance.Name] = types.BalanceTracker{
+								Amount:     balance.Balance,
+								PrevAmount: 0,
+							}
+						}
+
+						balancesMap[balance.Name] = types.BalanceTracker{
+							Amount:     balance.Balance,
+							PrevAmount: balancesMap[balance.Name].Amount,
+						}
+
+						if balancesMap[balance.Name].PrevAmount != 0 && balancesMap[balance.Name].Amount != 0 && balancesMap[balance.Name].PrevAmount != balancesMap[balance.Name].Amount {
+							sendExpense(balancesMap[balance.Name].PrevAmount-balancesMap[balance.Name].Amount, balance.Name)
+						}
 					}
 				}
 			}
@@ -446,23 +473,18 @@ func getBalances() {
 
 		response.ResponseMessage = responseMessage
 		response.Time = now
-
-		if !isError {
-			response.PrevTotal = response.Total
-			response.Total = totalExpenseBalance
-
-			if response.PrevTotal != 0 && response.Total != 0 && response.PrevTotal != response.Total {
-				sendExpense()
-			}
-		}
 	}
 	<-queueChanel
 }
 
 func buildExpenseMessage(expenses []types.Expense, startMessage string) string {
 	message := startMessage + ":\n"
+	total := .0
 	for _, v := range expenses {
 		message += fmt.Sprintf("\n*%s* - _%.2f грн_", v.Expense, v.Amount)
+		total += v.Amount
 	}
+	message += fmt.Sprintf("\n--------------------\nВсього: _%.2f грн_", total)
+
 	return message
 }

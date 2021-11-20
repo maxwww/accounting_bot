@@ -25,11 +25,14 @@ type Rates struct {
 type Response struct {
 	Time            int
 	ResponseMessage string
-	Total           float64
-	PrevTotal       float64
 }
 
 type Expense struct {
 	Expense string
 	Amount  float64
+}
+
+type BalanceTracker struct {
+	Amount     float64
+	PrevAmount float64
 }

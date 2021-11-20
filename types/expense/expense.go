@@ -7,15 +7,19 @@ const (
 	CLOTHES
 	CAR
 	HEALTH
+	CHEMICALS
+	GIFTS
 	CANCEL
 )
 
 var ExpenseMap = map[int]string{
-	OTHER:   "Інше",
-	TELECOM: "Телеком",
-	FOOD:    "Харчування",
-	CLOTHES: "Одяг",
-	CAR:     "Авто",
-	HEALTH:  "Здоров'я",
-	CANCEL:  "Відмінити",
+	CANCEL:    "Відмінити",
+	OTHER:     "Інше",
+	TELECOM:   "Телеком",
+	FOOD:      "Харчування",
+	CLOTHES:   "Одяг",
+	CAR:       "Авто",
+	HEALTH:    "Здоров'я",
+	CHEMICALS: "Хімія",
+	GIFTS:     "Подарунки",
 }
