@@ -2,7 +2,6 @@ package expense
 
 const (
 	OTHER = iota + 1
-	CANCEL
 	TELECOM
 	FOOD
 	CLOTHES
@@ -10,6 +9,7 @@ const (
 	HEALTH
 	CHEMICALS
 	GIFTS
+	CANCEL
 	COMMUNAL
 	EDUCATION
 	BEAUTY
