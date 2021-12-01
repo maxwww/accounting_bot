@@ -484,7 +484,7 @@ func buildExpenseMessage(expenses []types.Expense, startMessage string) string {
 		message += fmt.Sprintf("\n*%s* - _%.2f грн_", v.Expense, v.Amount)
 		total += v.Amount
 	}
-	message += fmt.Sprintf("\n--------------------\nВсього: _%.2f грн_", total)
+	message += fmt.Sprintf("\n--------------------\n*Всього:* _%.2f грн_", total)
 
 	return message
 }

@@ -2,6 +2,7 @@ package expense
 
 const (
 	OTHER = iota + 1
+	CANCEL
 	TELECOM
 	FOOD
 	CLOTHES
@@ -9,7 +10,10 @@ const (
 	HEALTH
 	CHEMICALS
 	GIFTS
-	CANCEL
+	COMMUNAL
+	EDUCATION
+	BEAUTY
+	RELAX
 )
 
 var ExpenseMap = map[int]string{
@@ -22,4 +26,8 @@ var ExpenseMap = map[int]string{
 	HEALTH:    "Здоров'я",
 	CHEMICALS: "Хімія",
 	GIFTS:     "Подарунки",
+	COMMUNAL:  "Комуналка",
+	EDUCATION: "Навчання",
+	BEAUTY:    "Краса",
+	RELAX:     "Відпочинок",
 }

@@ -44,8 +44,8 @@ func NewExpenseKeyboard(amount float64, now string) tgbotapi.InlineKeyboardMarku
 				fmt.Sprintf("%d@@%.2f@@%s", expense.HEALTH, amount, now),
 			),
 			tgbotapi.NewInlineKeyboardButtonData(
-				"Інше",
-				fmt.Sprintf("%d@@%.2f@@%s", expense.OTHER, amount, now),
+				"Відпочинок",
+				fmt.Sprintf("%d@@%.2f@@%s", expense.RELAX, amount, now),
 			),
 		),
 		tgbotapi.NewInlineKeyboardRow(
@@ -57,6 +57,26 @@ func NewExpenseKeyboard(amount float64, now string) tgbotapi.InlineKeyboardMarku
 				"Подарунки",
 				fmt.Sprintf("%d@@%.2f@@%s", expense.GIFTS, amount, now),
 			),
+			tgbotapi.NewInlineKeyboardButtonData(
+				"Комуналка",
+				fmt.Sprintf("%d@@%.2f@@%s", expense.COMMUNAL, amount, now),
+			),
+		),
+		tgbotapi.NewInlineKeyboardRow(
+			tgbotapi.NewInlineKeyboardButtonData(
+				"Навчання",
+				fmt.Sprintf("%d@@%.2f@@%s", expense.EDUCATION, amount, now),
+			),
+			tgbotapi.NewInlineKeyboardButtonData(
+				"Краса",
+				fmt.Sprintf("%d@@%.2f@@%s", expense.BEAUTY, amount, now),
+			),
+			tgbotapi.NewInlineKeyboardButtonData(
+				"Інше",
+				fmt.Sprintf("%d@@%.2f@@%s", expense.OTHER, amount, now),
+			),
+		),
+		tgbotapi.NewInlineKeyboardRow(
 			tgbotapi.NewInlineKeyboardButtonData(
 				"❌ Відмінити",
 				fmt.Sprintf("%d@@%.2f@@%s", expense.CANCEL, amount, now),
