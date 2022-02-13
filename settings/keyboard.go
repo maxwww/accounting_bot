@@ -11,6 +11,8 @@ func NewKeyboard() *tgbotapi.ReplyKeyboardMarkup {
 		tgbotapi.NewKeyboardButtonRow(
 			tgbotapi.NewKeyboardButton("Баланс"),
 			tgbotapi.NewKeyboardButton("Поточні"),
+		),
+		tgbotapi.NewKeyboardButtonRow(
 			tgbotapi.NewKeyboardButton("Минулі"),
 			tgbotapi.NewKeyboardButton("Позаминулі"),
 		),
