@@ -312,6 +312,28 @@ func handleUpdate(update tgbotapi.Update) {
 				}
 			}
 		}
+	case update.Message.Text == "Позаминулі":
+		expenses, err := db.GetPreLastMonthExpenses(dbConnection)
+		if err != nil {
+			log.Print(err)
+		} else {
+			if len(expenses) == 0 {
+				msg := tgbotapi.NewMessage(update.Message.Chat.ID, "Витрати відсутні")
+				msg.ReplyMarkup = keyboard
+				_, err := bot.Send(msg)
+				if err != nil {
+					log.Print(err)
+				}
+			} else {
+				msg := tgbotapi.NewMessage(update.Message.Chat.ID, buildExpenseMessage(expenses, "Ваші позаминуломісячні витрати"))
+				msg.ParseMode = "markdown"
+				msg.ReplyMarkup = keyboard
+				_, err := bot.Send(msg)
+				if err != nil {
+					log.Print(err)
+				}
+			}
+		}
 	case floatErr == nil:
 		if parsedFloat > 0 {
 			now := time.Now().Unix()

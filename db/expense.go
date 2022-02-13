@@ -71,6 +71,22 @@ func GetLastMonthExpenses(db *sql.DB) ([]types.Expense, error) {
 	currentYear, currentMonth, _ := tm.Date()
 	lastOfMonth := time.Date(currentYear, currentMonth, 1, 0, 0, 0, 0, location)
 	firstOfMonth := lastOfMonth.AddDate(0, -1, 0)
+
+	return GetMonthExpenses(db, firstOfMonth, lastOfMonth)
+}
+
+func GetPreLastMonthExpenses(db *sql.DB) ([]types.Expense, error) {
+	location, _ := time.LoadLocation("Europe/Kiev")
+	tm := time.Now().In(location)
+	currentYear, currentMonth, _ := tm.Date()
+	lastOfMonth := time.Date(currentYear, currentMonth, 1, 0, 0, 0, 0, location)
+	lastOfMonth = lastOfMonth.AddDate(0, -1, 0)
+	firstOfMonth := lastOfMonth.AddDate(0, -1, 0)
+
+	return GetMonthExpenses(db, firstOfMonth, lastOfMonth)
+}
+
+func GetMonthExpenses(db *sql.DB, firstOfMonth time.Time, lastOfMonth time.Time) ([]types.Expense, error) {
 	rows, err := db.Query(`select expense, sum(amount) am
 	from expenses
 	where created_at >= $1

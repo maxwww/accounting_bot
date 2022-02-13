@@ -12,6 +12,7 @@ func NewKeyboard() *tgbotapi.ReplyKeyboardMarkup {
 			tgbotapi.NewKeyboardButton("Баланс"),
 			tgbotapi.NewKeyboardButton("Поточні"),
 			tgbotapi.NewKeyboardButton("Минулі"),
+			tgbotapi.NewKeyboardButton("Позаминулі"),
 		),
 	)
 
@@ -36,7 +37,7 @@ func NewExpenseKeyboard(amount float64, now string) tgbotapi.InlineKeyboardMarku
 		),
 		tgbotapi.NewInlineKeyboardRow(
 			tgbotapi.NewInlineKeyboardButtonData(
-				"Авто",
+				"Трансопорт",
 				fmt.Sprintf("%d@@%.2f@@%s", expense.CAR, amount, now),
 			),
 			tgbotapi.NewInlineKeyboardButtonData(
