@@ -37,7 +37,7 @@ func NewExpenseKeyboard(amount float64, now string) tgbotapi.InlineKeyboardMarku
 		),
 		tgbotapi.NewInlineKeyboardRow(
 			tgbotapi.NewInlineKeyboardButtonData(
-				"Трансопорт",
+				"Транспорт",
 				fmt.Sprintf("%d@@%.2f@@%s", expense.CAR, amount, now),
 			),
 			tgbotapi.NewInlineKeyboardButtonData(

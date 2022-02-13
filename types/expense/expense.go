@@ -22,7 +22,7 @@ var ExpenseMap = map[int]string{
 	TELECOM:   "Телеком",
 	FOOD:      "Харчування",
 	CLOTHES:   "Одяг",
-	CAR:       "Трансопорт",
+	CAR:       "Транспорт",
 	HEALTH:    "Здоров'я",
 	CHEMICALS: "Хімія",
 	GIFTS:     "Подарунки",
