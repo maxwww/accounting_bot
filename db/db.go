@@ -55,6 +55,22 @@ create table if not exists accounts
 		log.Fatal("Error to create table users", err)
 	}
 
+	_, err = db.Exec(`
+create table if not exists expenses (
+	id serial not null
+		constraint expenses_pkey
+			primary key,
+	expense character varying,
+    amount numeric DEFAULT '0.0' NOT NULL,
+    created_at timestamp DEFAULT now() NOT NULL,
+    user_id integer NOT NULL
+);
+
+`)
+	if err != nil {
+		log.Fatal("Error to create table expenses", err)
+	}
+
 	var countRow int
 	err = db.QueryRow("SELECT COUNT(*) FROM accounts").Scan(&countRow)
 	if err != nil {
