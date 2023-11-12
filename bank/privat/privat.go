@@ -78,5 +78,5 @@ func GetBalance(password string, card string, merchant string, balanceUrl string
 		return
 	}
 
-	ch <- &types.Balance{Balance: result.ResultData.Info.Cardbalance.Balance, Name: name, Order: order}
+	ch <- &types.Balance{Balance: result.ResultData.Info.Cardbalance.Balance, Name: name, Order: order, CheckExpense: true}
 }

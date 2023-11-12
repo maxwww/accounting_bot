@@ -1,11 +1,12 @@
 package types
 
 type Balance struct {
-	Balance    float64
-	UsdBalance float64
-	Name       string
-	Error      error
-	Order      int
+	Balance      float64
+	UsdBalance   float64
+	Name         string
+	Error        error
+	Order        int
+	CheckExpense bool
 }
 
 type Rate struct {
@@ -24,4 +25,14 @@ type Rates struct {
 type Response struct {
 	Time            int
 	ResponseMessage string
+}
+
+type Expense struct {
+	Expense string
+	Amount  float64
+}
+
+type BalanceTracker struct {
+	Amount     float64
+	PrevAmount float64
 }

@@ -15,7 +15,7 @@ func NewConnection() *sql.DB {
 	pgPassword := os.Getenv("PG_PASSWORD")
 	pgHost := os.Getenv("PG_HOST")
 
-	connStr := fmt.Sprintf("host=%s dbname=%s user=%s password=%s sslmode=disable", pgHost, pgBasename, pgUser, pgPassword)
+	connStr := fmt.Sprintf("host=%s dbname=%s user=%s password=%s sslmode=disable TimeZone=Europe/Kiev", pgHost, pgBasename, pgUser, pgPassword)
 	db, err := sql.Open("postgres", connStr)
 	if err != nil {
 		log.Fatal("Error connect to DB", err)
@@ -53,6 +53,22 @@ create table if not exists accounts
 `)
 	if err != nil {
 		log.Fatal("Error to create table users", err)
+	}
+
+	_, err = db.Exec(`
+create table if not exists expenses (
+	id serial not null
+		constraint expenses_pkey
+			primary key,
+	expense character varying,
+    amount numeric DEFAULT '0.0' NOT NULL,
+    created_at timestamp DEFAULT now() NOT NULL,
+    user_id integer NOT NULL
+);
+
+`)
+	if err != nil {
+		log.Fatal("Error to create table expenses", err)
 	}
 
 	var countRow int
