@@ -14,6 +14,9 @@ const (
 	EDUCATION
 	BEAUTY
 	RELAX
+	CAT
+	HOUSE
+	HOBBY
 )
 
 var ExpenseMap = map[int]string{
@@ -30,4 +33,7 @@ var ExpenseMap = map[int]string{
 	EDUCATION: "Навчання",
 	BEAUTY:    "Краса",
 	RELAX:     "Відпочинок",
+	CAT:       "Кіт",
+	HOUSE:     "Благоустрій",
+	HOBBY:     "Хобі",
 }

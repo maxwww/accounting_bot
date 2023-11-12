@@ -67,6 +67,20 @@ func NewExpenseKeyboard(amount float64, now string) tgbotapi.InlineKeyboardMarku
 		),
 		tgbotapi.NewInlineKeyboardRow(
 			tgbotapi.NewInlineKeyboardButtonData(
+				"Кіт",
+				fmt.Sprintf("%d@@%.2f@@%s", expense.CAT, amount, now),
+			),
+			tgbotapi.NewInlineKeyboardButtonData(
+				"Благоустрій",
+				fmt.Sprintf("%d@@%.2f@@%s", expense.HOUSE, amount, now),
+			),
+			tgbotapi.NewInlineKeyboardButtonData(
+				"Хобі",
+				fmt.Sprintf("%d@@%.2f@@%s", expense.HOBBY, amount, now),
+			),
+		),
+		tgbotapi.NewInlineKeyboardRow(
+			tgbotapi.NewInlineKeyboardButtonData(
 				"Навчання",
 				fmt.Sprintf("%d@@%.2f@@%s", expense.EDUCATION, amount, now),
 			),
