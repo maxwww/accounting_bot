@@ -95,6 +95,12 @@ func NewExpenseKeyboard(amount float64, now string) tgbotapi.InlineKeyboardMarku
 		),
 		tgbotapi.NewInlineKeyboardRow(
 			tgbotapi.NewInlineKeyboardButtonData(
+				"Донати",
+				fmt.Sprintf("%d@@%.2f@@%s", expense.DONATIONS, amount, now),
+			),
+		),
+		tgbotapi.NewInlineKeyboardRow(
+			tgbotapi.NewInlineKeyboardButtonData(
 				"❌ Відмінити",
 				fmt.Sprintf("%d@@%.2f@@%s", expense.CANCEL, amount, now),
 			),
