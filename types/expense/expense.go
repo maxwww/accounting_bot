@@ -17,6 +17,7 @@ const (
 	CAT
 	HOUSE
 	HOBBY
+	DONATIONS
 )
 
 var ExpenseMap = map[int]string{
@@ -36,4 +37,5 @@ var ExpenseMap = map[int]string{
 	CAT:       "Кіт",
 	HOUSE:     "Благоустрій",
 	HOBBY:     "Хобі",
+	DONATIONS: "Донати",
 }
